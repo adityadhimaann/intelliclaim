@@ -27,8 +27,8 @@ class EnhancedAIService:
     def __init__(self):
         # Gemini configuration (Primary AI)
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        # Updated to use Gemini Flash model
-        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        # Updated to use Gemini 2.5 Flash model
+        self.gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
         self.gemini_max_tokens = int(os.getenv("GEMINI_MAX_TOKENS", 8000))
         self.gemini_temperature = float(os.getenv("GEMINI_TEMPERATURE", 0.1))
         # Hard 2s SLA for generation
@@ -93,9 +93,9 @@ class EnhancedAIService:
                     safety_settings=safety_settings
                 )
                 self.gemini_available = True
-                logger.info(f"Gemini Flash 2.5 Service initialized with model: {self.gemini_model}")
+                logger.info(f"Gemini 2.5 Flash Service initialized with model: {self.gemini_model}")
             except Exception as e:
-                logger.error(f"Failed to initialize Gemini Flash 2.5 client: {str(e)}")
+                logger.error(f"Failed to initialize Gemini 2.5 Flash client: {str(e)}")
                 self.gemini_client = None
                 self.gemini_available = False
         else:
@@ -183,7 +183,7 @@ class EnhancedAIService:
             # Create vision-based prompt
             vision_prompt = self._create_vision_analysis_prompt(user_query)
             
-            # Configure generation settings for vision with Flash 2.5
+            # Configure generation settings for vision with 2.5 Flash
             generation_config = {
                 "temperature": self.gemini_temperature,
                 "top_p": 0.95,
