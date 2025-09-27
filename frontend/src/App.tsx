@@ -71,10 +71,10 @@ export default function App() {
     if (isAuthenticated) {
       setCurrentPage('documents'); // Redirect to Smart Prediction System
     } else {
+      setIsLoading(true);
+      
       try {
-        setIsLoading(true);
-        
-        // Create a trial user automatically
+        // Try to create a trial user with backend
         const timestamp = Date.now();
         const trialUserData = {
           email: `trial-user-${timestamp}@intelliclaim.trial`,
@@ -98,16 +98,27 @@ export default function App() {
         setUserProfile(loginResponse.user);
         setIsAuthenticated(true);
         setIsTrialUser(true);
-        setCurrentPage('documents'); // Redirect to Smart Prediction System
         
         toast.success('🎉 Welcome to your free trial! Explore the Smart Prediction System.');
         
       } catch (error: any) {
-        console.error('Trial setup failed:', error);
-        toast.error('Failed to start trial. Please try the manual login instead.');
-        setCurrentPage('auth'); // Fallback to auth page
+        console.error('Backend unavailable, proceeding with offline trial:', error);
+        
+        // Backend is down - create offline trial session
+        const timestamp = Date.now();
+        setUserProfile({
+          name: `Trial User ${timestamp.toString().slice(-4)}`,
+          email: `trial-user-${timestamp}@intelliclaim.trial`,
+          id: timestamp
+        });
+        setIsAuthenticated(true);
+        setIsTrialUser(true);
+        
+        toast.success('🎉 Welcome to your offline trial! Explore the Smart Prediction System.');
       } finally {
         setIsLoading(false);
+        // Always redirect to Smart Prediction System regardless of backend status
+        setCurrentPage('documents');
       }
     }
   };
