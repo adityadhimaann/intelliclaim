@@ -3,19 +3,18 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ThemeProvider } from './components/theme-provider';
 import { Auth } from './components/auth';
 import { LandingPage } from './components/landing-page';
-import { Dashboard } from './components/dashboard';
 import { DocumentProcessor } from './components/document-processor';
 import { WorkflowBuilder } from './components/workflow-builder';
 import { VisionInspector } from './components/vision-inspector';
 import { Settings } from './components/settings';
 import { Navigation } from './components/navigation';
-import { SimpleBackendTester } from './components/simple-backend-tester';
+
 import { Toaster } from './components/ui/sonner';
 import { ErrorFallback, useErrorHandler } from './components/ErrorBoundary';
 import { apiClient, API_CONFIG } from './config/api';
 import { toast } from 'sonner';
 
-type Page = 'landing' | 'auth' | 'dashboard' | 'documents' | 'workflows' | 'vision' | 'settings' | 'test-backend';
+type Page = 'landing' | 'auth' | 'documents' | 'workflows' | 'vision' | 'settings';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState('landing');
@@ -55,7 +54,7 @@ export default function App() {
 
   const handleAuthenticated = () => {
     setIsAuthenticated(true);
-    setCurrentPage('dashboard');
+    setCurrentPage('documents');
     toast.success('Welcome to IntelliClaim!');
   };
 
@@ -70,7 +69,7 @@ export default function App() {
 
   const handleStartTrial = async () => {
     if (isAuthenticated) {
-      setCurrentPage('dashboard');
+      setCurrentPage('documents'); // Redirect to Smart Prediction System
     } else {
       try {
         setIsLoading(true);
@@ -99,9 +98,9 @@ export default function App() {
         setUserProfile(loginResponse.user);
         setIsAuthenticated(true);
         setIsTrialUser(true);
-        setCurrentPage('dashboard');
+        setCurrentPage('documents'); // Redirect to Smart Prediction System
         
-        toast.success('🎉 Welcome to your free trial! Explore all IntelliClaim features.');
+        toast.success('🎉 Welcome to your free trial! Explore the Smart Prediction System.');
         
       } catch (error: any) {
         console.error('Trial setup failed:', error);
@@ -159,11 +158,9 @@ export default function App() {
       onAuthenticated={handleAuthenticated}
       onBackToLanding={() => setCurrentPage('landing')}
     />,
-    dashboard: <Dashboard />,
     documents: <DocumentProcessor />,
     workflows: <WorkflowBuilder />,
     vision: <VisionInspector />,
-    'test-backend': <SimpleBackendTester />,
     settings: <Settings 
       isTrialUser={isTrialUser}
       onUpgrade={() => setCurrentPage('landing')}
@@ -177,7 +174,7 @@ export default function App() {
         ) : currentPage === 'auth' ? (
           pageComponents.auth
         ) : (
-          <div className="flex flex-col lg:flex-row h-screen">
+          <div className="flex min-h-screen">
             <Navigation 
               currentPage={currentPage} 
               onPageChange={setCurrentPage}
@@ -189,7 +186,7 @@ export default function App() {
               isTrialUser={isTrialUser}
               onUpgrade={() => {}} // Auth is now handled within landing page
             />
-            <main className="flex-1 overflow-auto">
+            <main className="flex-1">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={currentPage}

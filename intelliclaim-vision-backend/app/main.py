@@ -19,6 +19,9 @@ load_dotenv()
 # Import our document processor
 from .document_processor import document_processor
 
+# Import demo routes
+from .api.demo import router as demo_router
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -514,9 +517,8 @@ async def update_profile_settings(
     
     return {"message": "Profile updated successfully"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Include demo routes for presentation
+app.include_router(demo_router, prefix="/api/v1/demo", tags=["demo"])
 
 if __name__ == "__main__":
     import uvicorn

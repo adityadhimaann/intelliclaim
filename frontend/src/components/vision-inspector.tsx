@@ -7,6 +7,7 @@ import { Progress } from './ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { toast } from 'sonner';
+import { formatIndianRupees, convertUSDToINR } from '../utils/currency';
 import {
   Camera,
   Upload,
@@ -36,7 +37,8 @@ import {
   ZoomIn,
   Download,
   Share,
-  Maximize
+  Maximize,
+  X
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -51,7 +53,27 @@ export function VisionInspector() {
   const [documentId, setDocumentId] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Helper function to normalize amounts to Indian format
+  const normalizeToIndianRupees = (amount: string | number): number => {
+    if (!amount) return 0;
+    
+    if (typeof amount === 'string') {
+      const cleanAmount = amount.replace(/[^\d.-]/g, '');
+      const numAmount = parseFloat(cleanAmount);
+      
+      // If the original string contained USD/$, convert to INR
+      if (amount.includes('$') || amount.toLowerCase().includes('usd')) {
+        return convertUSDToINR(numAmount);
+      }
+      
+      return numAmount || 0;
+    }
+    
+    return amount;
+  };
 
   const getAuthToken = () => {
     // Try to get token from localStorage first
@@ -65,15 +87,54 @@ export function VisionInspector() {
   };  const handleImageUpload = (event) => {
     const file = event.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setSelectedImage(e.target?.result);
-        setSelectedFile(file);
-        setVisionAnalysis(null);
-        setDocumentId(null);
-      };
-      reader.readAsDataURL(file);
+      processFile(file);
     }
+  };
+
+  const processFile = (file) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file (PNG, JPG, JPEG, GIF)');
+      return;
+    }
+    
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      toast.error('Image size must be less than 10MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setSelectedImage(e.target?.result);
+      setSelectedFile(file);
+      setVisionAnalysis(null);
+      setDocumentId(null);
+      toast.success(`Image "${file.name}" uploaded successfully`);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = e.dataTransfer.files;
+    if (files && files[0]) {
+      processFile(files[0]);
+    }
+  };
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
   };
 
   const uploadDocument = async (file) => {
@@ -145,7 +206,7 @@ Focus specifically on insurance-related content and provide detailed analysis fo
         text_content: apiResponse.extracted_data?.text_content || apiResponse.ai_reasoning || 'Vision analysis completed',
         key_information: {
           policy_number: apiResponse.extracted_data?.key_information?.reference_number || 'Not detected',
-          claim_amount: apiResponse.extracted_data?.key_information?.amount || 'Not specified',
+          claim_amount: normalizeToIndianRupees(apiResponse.extracted_data?.key_information?.amount) || 'Not specified',
           incident_date: apiResponse.extracted_data?.key_information?.date || 'Not detected',
           document_type: apiResponse.document_type || 'Insurance document'
         }
@@ -216,38 +277,61 @@ Focus specifically on insurance-related content and provide detailed analysis fo
       
     } catch (error) {
       console.error('Vision analysis failed:', error);
-      toast.error(`Analysis failed: ${error.message}`);
+      
+      let errorMessage = 'Analysis failed';
+      if (error.message.includes('Upload failed: Unauthorized')) {
+        errorMessage = 'Authentication failed. Please check your login status.';
+        toast.error('Authentication error - please refresh and try again');
+      } else if (error.message.includes('Authentication required')) {
+        errorMessage = 'Authentication required. Please log in.';
+        toast.error('Please log in to use vision analysis');
+      } else if (error.message.includes('Network')) {
+        errorMessage = 'Network error. Check your connection.';
+        toast.error('Network error - please check your internet connection');
+      } else {
+        toast.error(`Analysis failed: ${error.message}`);
+      }
       
       const fallbackAnalysis = {
-        decision: 'NEEDS_REVIEW',
-        confidence: 75,
-        document_type: 'unknown_document',
+        decision: 'ERROR',
+        confidence: 0,
+        document_type: 'analysis_failed',
         extracted_data: {
-          text_content: 'AI vision analysis temporarily unavailable',
-          key_information: {}
+          text_content: `Analysis failed: ${errorMessage}`,
+          key_information: {
+            error: errorMessage,
+            status: 'Failed to process'
+          }
         },
         analysis: {
-          summary: 'Fallback analysis - AI services temporarily at capacity',
-          key_findings: ['Document uploaded successfully', 'Manual review recommended'],
-          potential_issues: ['AI quota exceeded - enhanced fallback engaged'],
-          recommendations: ['Try again in a few minutes', 'Gemini vision will be available shortly']
+          summary: `Vision analysis could not be completed: ${errorMessage}`,
+          key_findings: ['Analysis failed', 'Please try again or contact support'],
+          potential_issues: [error.message],
+          recommendations: [
+            'Check your internet connection',
+            'Ensure the backend server is running',
+            'Verify authentication status',
+            'Try uploading a different image format'
+          ]
         },
-        ai_reasoning: 'Intelligent fallback due to service capacity limits',
+        ai_reasoning: `Analysis Error: ${error.message}`,
         compliance_check: {
           regulatory_compliance: false,
-          documentation_complete: true,
+          documentation_complete: false,
           signature_present: false,
-          date_valid: true
+          date_valid: false
         },
         analysis_timestamp: new Date().toISOString(),
-        model_used: 'enhanced_fallback',
-        ai_service: 'fallback_enhanced'
+        model_used: 'error_handler',
+        ai_service: 'error_response',
+        error: true
       };
       
       setVisionAnalysis(fallbackAnalysis);
       setActiveView('analyzed');
     } finally {
       setIsAnalyzing(false);
+      setAnalysisProgress(0);
     }
   };
 
@@ -294,18 +378,33 @@ Focus specifically on insurance-related content and provide detailed analysis fo
             </CardHeader>
             <CardContent>
               <motion.div
-                className="border-2 border-dashed border-border/50 rounded-xl p-6 text-center hover:border-[#8B5CF6]/50 transition-colors cursor-pointer"
+                className={`border-2 border-dashed rounded-xl p-6 text-center transition-all duration-200 cursor-pointer ${
+                  isDragOver
+                    ? 'border-[#8B5CF6] bg-[#8B5CF6]/5 scale-102'
+                    : 'border-border/50 hover:border-[#8B5CF6]/50'
+                }`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={handleClick}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
               >
-                <FileImage className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-sm font-medium mb-2">Drop files here or click to browse</p>
-                <p className="text-xs text-muted-foreground">PDF, PNG, JPG up to 10MB</p>
+                <FileImage 
+                  className={`w-12 h-12 mx-auto mb-4 transition-colors ${
+                    isDragOver ? 'text-[#8B5CF6]' : 'text-muted-foreground'
+                  }`} 
+                />
+                <p className={`text-sm font-medium mb-2 ${isDragOver ? 'text-[#8B5CF6]' : ''}`}>
+                  {isDragOver ? '📁 Drop your image here!' : 'Drop files here or click to browse'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isDragOver ? 'Release to upload' : 'PNG, JPG, JPEG, GIF up to 10MB'}
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.pdf"
+                  accept="image/*"
                   onChange={handleImageUpload}
                   className="hidden"
                 />
@@ -333,23 +432,45 @@ Focus specifically on insurance-related content and provide detailed analysis fo
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button
-                className="w-full bg-gradient-to-r from-[#8B5CF6] to-[#0066FF] hover:from-[#7C3AED] hover:to-[#0052CC] text-white font-medium py-3 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-                onClick={handleAnalysis}
-                disabled={!selectedFile || isAnalyzing}
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Cpu className="w-4 h-4 animate-spin" />
-                    <span>Analyzing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Scan className="w-4 h-4" />
-                    <span>Start Vision Analysis</span>
-                  </>
+              <div className="space-y-3">
+                <Button
+                  className="w-full bg-gradient-to-r from-[#8B5CF6] to-[#0066FF] hover:from-[#7C3AED] hover:to-[#0052CC] text-white font-medium py-3 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  onClick={handleAnalysis}
+                  disabled={!selectedFile || isAnalyzing}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Cpu className="w-4 h-4 animate-spin" />
+                      <span>Analyzing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="w-4 h-4" />
+                      <span>Start Vision Analysis</span>
+                    </>
+                  )}
+                </Button>
+                
+                {(selectedFile || visionAnalysis) && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setSelectedImage(null);
+                      setSelectedFile(null);
+                      setVisionAnalysis(null);
+                      setDocumentId(null);
+                      setActiveView('original');
+                      setAnalysisProgress(0);
+                      toast.info('Cleared - ready for new analysis');
+                    }}
+                    disabled={isAnalyzing}
+                  >
+                    <X className="w-4 h-4 mr-2" />
+                    Clear & Reset
+                  </Button>
                 )}
-              </Button>
+              </div>
               
               {isAnalyzing && (
                 <div className="space-y-2">
@@ -684,7 +805,10 @@ Focus specifically on insurance-related content and provide detailed analysis fo
                                     {key.replace('_', ' ')}:
                                   </span>
                                   <span className="text-sm font-semibold">
-                                    {value || 'Not detected'}
+                                    {key === 'claim_amount' && value && value !== 'Not detected' && value !== 'Not specified' 
+                                      ? formatIndianRupees(value as string | number)
+                                      : (value || 'Not detected')
+                                    }
                                   </span>
                                 </div>
                               ))}
